@@ -1,0 +1,23 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.32014.148
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "FinalProject_NetworkSystem", "FinalProject_NetworkSystem\FinalProject_NetworkSystem.pyproj", "{2FD620BC-6C1C-4D90-AB76-DF40082792C5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2FD620BC-6C1C-4D90-AB76-DF40082792C5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2FD620BC-6C1C-4D90-AB76-DF40082792C5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {BED3B4CE-034E-4AB9-9BC3-1B154FCB3DF9}
+	EndGlobalSection
+EndGlobal
