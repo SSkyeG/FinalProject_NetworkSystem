@@ -12,8 +12,11 @@ class EventType(Enum):
     PacketSpawn = 1
     RouterToLink = 2
     LinkToRouter = 3
+    TransmissionDone = 4
+    ProcDone = 5
 
-phpd =0.000002
+phpd =0.002
+maxQSize=6
 
 #-----Classes-----
 #Packet
@@ -60,9 +63,14 @@ class Event:
         if (self.EventType == EventType.PacketSpawn):
             return self.toNext.SpawnPacket(self.packet, self.time)
         elif (self.EventType == EventType.RouterToLink):
-            return self.toNext.GoThroughLink(self.packet, self.time)
+            return self.toNext.GoThroughLink(self.packet, self.time, False)
+        elif (self.EventType == EventType.ProcDone ):
+            return self.toNext.ProcIsDone(self.packet, self.time)
+        elif (self.EventType == EventType.TransmissionDone):
+            return self.toNext.GoThroughLink(self.packet, self.time, True)
         elif (self.EventType == EventType.LinkToRouter ):
             return self.toNext.AddPacketToQueue(self.packet, self.time)
+
         return Event(-1, 0, 0, EventType.RouterToLink)
         
 
@@ -90,13 +98,25 @@ class Router:
     def __init__(self, ed, a, pos):
         self.IsEndDevice = ed
         self.address = a #it's address
-        self.PacketQ= queue.Queue()
+        self.PacketQ= queue.Queue(maxQSize)
+        self.ProcPacketQ= queue.Queue(maxQSize)
         self.Links = []
         self.pos = pos
         self.proccessingDelay = phpd
         self.visual = sphere(pos=pos, radius=0.5, color=color.purple)
         self.PacketsReachedDest = []
+        self.isProccessing = False
 
+        self.arrived = 0
+        self.serviced = 0
+        self.arrivalRate = 0
+        self.serviceRate = 0
+
+    def PacketsReachedDestLen(self):
+        return len(self.PacketsReachedDest)
+
+    def GetQDelay(self):
+        return 1/(self.serviceRate - self.arrivalRate)
     def GetPos(self):
         return self.pos
     def getAddress(self):
@@ -105,16 +125,25 @@ class Router:
         if not self.PacketQ.empty():
             return self.PacketQ.get()
         else:
-            print("nothing in q")
+            #print("nothing in q")
             return 0
+    def popOffFromProcQ(self):
+        if not self.ProcPacketQ.empty():
+            return self.ProcPacketQ.get()
+        else:
+            #print("nothing in proc q")
+            return 0
+
     def isQEmpty(self):
         return self.PacketQ.empty()
+    def isProcQEmpty(self):
+        return self.ProcPacketQ.empty()
 
     def AddLinks(self, l):
         self.Links = l
 
     def SpawnPacket(self, p, time):
-        self.PacketQ.put(p)
+        self.ProcPacketQ.put(p)
         nextL = self.determineNextRouter()
         if(nextL.getIsBusy()==True):
             return Event(-1, 0, 0, EventType.RouterToLink)
@@ -126,14 +155,50 @@ class Router:
         l.setIsBusy(False)
 
         if(p.getDestination()==self.address):
-            print(str(time))
+            print("***"+self.address +"  recieved at time  "+ str(time)+ "   says: " + p.getPayload())
             self.PacketsReachedDest.append(time)
             return Event(-1, 0, 0, EventType.RouterToLink)
         else:
             print(self.address +"   "+ str(time)+ "   says: " + p.getPayload())
-            self.PacketQ.put(p)
+            if(self.PacketQ.qsize()>=maxQSize):
+                print("--Packet Lost: "+p.getPayload())
+                return Event(-1, 0, 0, EventType.RouterToLink) #packet loss as queue is overrun
+            else:
+                self.arrived = self.arrived+1
+                self.arrivalRate = self.arrived / time
+                self.PacketQ.put(p)
             nextL = self.determineNextRouter()
-            return Event(time+self.proccessingDelay, p, nextL, EventType.RouterToLink)
+            if self.isProccessing:
+                return Event(-1, 0, 0, EventType.RouterToLink)
+            self.isProccessing = True
+            return Event(time+self.proccessingDelay, p, self, EventType.ProcDone)
+
+    def ProcIsDone(self, p, time):
+        print(self.address +"   "+ str(time)+ "   finished Proc: " + p.getPayload())
+        self.isProccessing = False
+        nextP = self.popOffFromQ()
+
+        if isinstance(nextP, int):
+            return Event(-1, 0, 0, EventType.RouterToLink)
+
+        self.ProcPacketQ.put(nextP)
+        nextL = self.determineNextRouter()
+        e1 = Event(time, nextP, nextL, EventType.RouterToLink)
+
+        followingP = self.popOffFromQ()
+
+        self.serviced = self.serviced+1
+        self.serviceRate = self.serviced / (time+self.proccessingDelay)
+
+        if isinstance(followingP, Packet):
+            self.PacketQ.put(followingP)
+            self.isProccessing = True
+            print("   "+self.address +"   "+ str(time)+ "   up next: " + followingP.getPayload())
+            return (e1, Event(time+self.proccessingDelay, followingP, self, EventType.ProcDone))
+        else:
+            return (e1, Event(time+self.proccessingDelay, p, self, EventType.ProcDone))
+        
+        return e1
 
     def getPastLink(self, p):
         l = [x 
@@ -163,23 +228,30 @@ class Link:
     def setIsBusy(self, b):
         self.isBusy = b
 
-    def GoThroughLink(self, p, time):
+    def GoThroughLink(self, p, time, busy):
+        if busy:
+            print("  Transmission Ended")
+            self.isBusy = False
+        #print("  Line is Busy:" + str(busy))
+        if(self.isBusy):
+            return Event(-1, 0, 0, EventType.RouterToLink)
         self.isBusy=True
-        (nextTime, transmTime) = self.calcDelays(p)
-        nextTime = time + nextTime
-        transmTime = time + transmTime
+        (nextTime1, transmTime1) = self.calcDelays(p)
+        nextTime = time + nextTime1
+        transmTime = time + transmTime1
 
         fromAdd = p.getFrom()
         nextR = self.getToAddr(fromAdd)
         prevR = self.getToAddr(nextR.getAddress())
-        pack = prevR.popOffFromQ()
+        pack = prevR.popOffFromProcQ()
         if isinstance(pack, int):
             return Event(-1, 0, 0, EventType.RouterToLink)
         pack.setTo(nextR.getAddress())
         pack.setFrom(prevR.getAddress())
         e1 =  Event(nextTime, pack, nextR, EventType.LinkToRouter)
         #if not nextR.isQEmpty():
-        e2 =  Event(transmTime, pack, self, EventType.RouterToLink)
+        e2 =  Event(transmTime, pack, self, EventType.TransmissionDone)
+        print(prevR.address +"  sending at time  "+ str(time)+ "   says: " + pack.getPayload())
         return (e1, e2)
         return e1
 
@@ -207,22 +279,24 @@ B = 15000000  #bits per sec (15 Mb)
 bits = 1024
 
 #-----Network Setup------
-Routers={"4004":Router(True, "4004", vector(-4,0,0)),  "f11c":Router(False, "f11c", vector(-2,0,0)),
+Routers={"4004":Router(True, "4004", vector(-4,-1,0)),  "f11c":Router(False, "f11c", vector(-2,0,0)),
          "cead":Router(False, "cead", vector(0,0,0)), "1297":Router(False, "1297", vector(2,0,0)),
-         "e17d":Router(True, "e17d", vector(4,0,0))}
+         "e17d":Router(True, "e17d", vector(4,0,0)), "f88f":Router(True, "f88f", vector(-4,1,0))}
 
-Links=[Link(L,V,B), Link(L,V,B), Link(L,V,B), Link(L,V,B)]
+Links=[Link(L,V,B), Link(L,V,B), Link(L,V,B), Link(L,V,B), Link(L,V,B)]
 
 Routers["4004"].AddLinks([Links[0]])
-Routers["f11c"].AddLinks([Links[0], Links[1]])
+Routers["f11c"].AddLinks([Links[0], Links[1], Links[4]])
 Routers["cead"].AddLinks([Links[1], Links[2]])
 Routers["1297"].AddLinks([Links[2], Links[3]])
 Routers["e17d"].AddLinks([Links[3]])
+Routers["f88f"].AddLinks([Links[4]])
 
 Links[0].AddRouters(Routers["4004"], Routers["f11c"])
 Links[1].AddRouters(Routers["cead"], Routers["f11c"])
 Links[2].AddRouters(Routers["1297"], Routers["cead"])
 Links[3].AddRouters(Routers["e17d"], Routers["1297"])
+Links[4].AddRouters(Routers["f88f"], Routers["f11c"])
 
 #------Event Setup---------
 EventQ = queue.PriorityQueue()
@@ -235,6 +309,14 @@ e = Event(0.0000000002, Packet(0, "4004", "e17d", "3: Hello There", bits), Route
 EventQ.put(e)
 e = Event(0.0000000003, Packet(0, "4004", "e17d", "4: Hello There", bits), Routers["4004"], EventType.PacketSpawn)
 EventQ.put(e)
+#e = Event(0, Packet(0, "f88f", "e17d", "5: Hello There", bits), Routers["f88f"], EventType.PacketSpawn)
+#EventQ.put(e)
+#e = Event(0.0000000001, Packet(0, "f88f", "e17d", "6: Hello There", bits), Routers["f88f"], EventType.PacketSpawn)
+#EventQ.put(e)
+#e = Event(0.0000000002, Packet(0, "f88f", "e17d", "7: Hello There", bits), Routers["f88f"], EventType.PacketSpawn)
+#EventQ.put(e)
+#e = Event(0.0000000003, Packet(0, "f88f", "e17d", "8: Hello There", bits), Routers["f88f"], EventType.PacketSpawn)
+#EventQ.put(e)
 
 Nm = EventQ.qsize()
 
@@ -249,8 +331,13 @@ while(not EventQ.empty()):
         EventQ.put(nextEvent)
     print("yo")
 
-nh=len(Links)
+nh=4#len(Links)
 
 TotDelay = (nh*(L/V)) + (Nm*(bits/B))+ (nh-1)*((bits/B)+phpd)
+
 print("Calc Total delay:" + str(TotDelay))
+packRec = Routers["e17d"].PacketsReachedDestLen()/Nm
+qD = Routers["f11c"].GetQDelay()
+print("Queuing delay:" + str(qD))
+print("Received Packet:  "+str(packRec)+"%")
 print("done")
