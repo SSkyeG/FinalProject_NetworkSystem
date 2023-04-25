@@ -105,7 +105,7 @@ class Router:
         if not self.PacketQ.empty():
             return self.PacketQ.get()
         else:
-            print("nothing in q")
+            #print("nothing in q")
             return 0
     def isQEmpty(self):
         return self.PacketQ.empty()
@@ -126,7 +126,7 @@ class Router:
         l.setIsBusy(False)
 
         if(p.getDestination()==self.address):
-            print(str(time))
+            print("Reached Dest "+self.address +" at "+ str(time))
             self.PacketsReachedDest.append(time)
             return Event(-1, 0, 0, EventType.RouterToLink)
         else:
@@ -207,22 +207,24 @@ B = 15000000  #bits per sec (15 Mb)
 bits = 1024
 
 #-----Network Setup------
-Routers={"4004":Router(True, "4004", vector(-4,0,0)),  "f11c":Router(False, "f11c", vector(-2,0,0)),
+Routers={"4004":Router(True, "4004", vector(-4,-1,0)),  "f11c":Router(False, "f11c", vector(-2,0,0)),
          "cead":Router(False, "cead", vector(0,0,0)), "1297":Router(False, "1297", vector(2,0,0)),
-         "e17d":Router(True, "e17d", vector(4,0,0))}
+         "e17d":Router(True, "e17d", vector(4,0,0)), "f88f":Router(True, "f88f", vector(-4,1,0))}
 
-Links=[Link(L,V,B), Link(L,V,B), Link(L,V,B), Link(L,V,B)]
+Links=[Link(L,V,B), Link(L,V,B), Link(L,V,B), Link(L,V,B), Link(L,V,B)]
 
 Routers["4004"].AddLinks([Links[0]])
-Routers["f11c"].AddLinks([Links[0], Links[1]])
+Routers["f11c"].AddLinks([Links[0], Links[1], Links[4]])
 Routers["cead"].AddLinks([Links[1], Links[2]])
 Routers["1297"].AddLinks([Links[2], Links[3]])
 Routers["e17d"].AddLinks([Links[3]])
+Routers["f88f"].AddLinks([Links[4]])
 
 Links[0].AddRouters(Routers["4004"], Routers["f11c"])
 Links[1].AddRouters(Routers["cead"], Routers["f11c"])
 Links[2].AddRouters(Routers["1297"], Routers["cead"])
 Links[3].AddRouters(Routers["e17d"], Routers["1297"])
+Links[4].AddRouters(Routers["f88f"], Routers["f11c"])
 
 #------Event Setup---------
 EventQ = queue.PriorityQueue()
@@ -235,7 +237,14 @@ e = Event(0.0000000002, Packet(0, "4004", "e17d", "3: Hello There", bits), Route
 EventQ.put(e)
 e = Event(0.0000000003, Packet(0, "4004", "e17d", "4: Hello There", bits), Routers["4004"], EventType.PacketSpawn)
 EventQ.put(e)
-
+#e = Event(0, Packet(0, "f88f", "e17d", "5: Hello There", bits), Routers["f88f"], EventType.PacketSpawn)
+#EventQ.put(e)
+#e = Event(0.0000000001, Packet(0, "f88f", "e17d", "6: Hello There", bits), Routers["f88f"], EventType.PacketSpawn)
+#EventQ.put(e)
+#e = Event(0.0000000002, Packet(0, "f88f", "e17d", "7: Hello There", bits), Routers["f88f"], EventType.PacketSpawn)
+#EventQ.put(e)
+#e = Event(0.0000000003, Packet(0, "f88f", "e17d", "8: Hello There", bits), Routers["f88f"], EventType.PacketSpawn)
+#EventQ.put(e)
 Nm = EventQ.qsize()
 
 while(not EventQ.empty()):
@@ -247,9 +256,9 @@ while(not EventQ.empty()):
         EventQ.put(nextEvent[1])
     elif nextEvent.getTime() != -1:
         EventQ.put(nextEvent)
-    print("yo")
+    #print("yo")
 
-nh=len(Links)
+nh=4#len(Links)
 
 TotDelay = (nh*(L/V)) + (Nm*(bits/B))+ (nh-1)*((bits/B)+phpd)
 print("Calc Total delay:" + str(TotDelay))
