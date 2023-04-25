@@ -155,7 +155,7 @@ class Router:
         l.setIsBusy(False)
 
         if(p.getDestination()==self.address):
-            print(self.address +"  recieved at time  "+ str(time)+ "   says: " + p.getPayload())
+            print("***"+self.address +"  recieved at time  "+ str(time)+ "   says: " + p.getPayload())
             self.PacketsReachedDest.append(time)
             return Event(-1, 0, 0, EventType.RouterToLink)
         else:
@@ -307,8 +307,8 @@ e = Event(0.0000000001, Packet(0, "4004", "e17d", "2: Hello There", bits), Route
 EventQ.put(e)
 e = Event(0.0000000002, Packet(0, "4004", "e17d", "3: Hello There", bits), Routers["4004"], EventType.PacketSpawn)
 EventQ.put(e)
-#e = Event(0.0000000003, Packet(0, "4004", "e17d", "4: Hello There", bits), Routers["4004"], EventType.PacketSpawn)
-#EventQ.put(e)
+e = Event(0.0000000003, Packet(0, "4004", "e17d", "4: Hello There", bits), Routers["4004"], EventType.PacketSpawn)
+EventQ.put(e)
 #e = Event(0, Packet(0, "f88f", "e17d", "5: Hello There", bits), Routers["f88f"], EventType.PacketSpawn)
 #EventQ.put(e)
 #e = Event(0.0000000001, Packet(0, "f88f", "e17d", "6: Hello There", bits), Routers["f88f"], EventType.PacketSpawn)
@@ -331,7 +331,7 @@ while(not EventQ.empty()):
         EventQ.put(nextEvent)
     print("yo")
 
-nh=len(Links)
+nh=4#len(Links)
 
 TotDelay = (nh*(L/V)) + (Nm*(bits/B))+ (nh-1)*((bits/B)+phpd)
 
